@@ -1,8 +1,13 @@
 [package]
-name = "classinfo"
+name = "od"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
 
 [dependencies]
+object = { version = "^0.28" }
+anyhow = { version = "^1.0" }
+tokio = { version = "^1.0", features = ["full"] }
+log = { version = "^0.4" }
+pretty_env_logger = { version = "^0.4" }
