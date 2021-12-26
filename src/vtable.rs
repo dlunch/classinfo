@@ -22,7 +22,7 @@ pub fn find_vtables(object: &File) -> Result<Vec<Class>> {
     let data = data_section.data()?;
 
     let rdata_section = object.section_by_name(".rdata").ok_or(anyhow!("No .rdata section"))?;
-    let rdata = data_section.data()?;
+    let rdata = rdata_section.data()?;
 
     let pointer_size = if object.is_64() { 8 } else { 4 };
 
@@ -38,11 +38,10 @@ pub fn find_vtables(object: &File) -> Result<Vec<Class>> {
         .step_by(pointer_size)
         .fold(State { last: None, all: Vec::new() }, |mut state, (i, x)| {
             let ptr = convert_pointer(x, pointer_size);
-            log::debug!("{}", ptr);
 
             if text_section.address() < ptr && ptr < text_section.address() + text_section.size() {
                 if state.last.is_none() {
-                    log::trace!("vtable candidate at {}", i);
+                    log::trace!("vtable candidate at {:#x}", i);
                     state.last = Some(ptr);
                 }
             } else if state.last.is_some() {
