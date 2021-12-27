@@ -7,8 +7,6 @@ use std::collections::BTreeSet;
 use anyhow::{anyhow, Result};
 use object::{File, Object, ObjectSection};
 
-use crate::class::Class;
-
 fn convert_pointer(raw: &[u8], pointer_size: usize) -> u64 {
     let value = &raw[0..pointer_size];
 
@@ -19,7 +17,7 @@ fn convert_pointer(raw: &[u8], pointer_size: usize) -> u64 {
     }
 }
 
-pub fn find_vtables(object: &File) -> Result<Vec<Class>> {
+pub fn find_vtables(object: &File) -> Result<Vec<u64>> {
     let text_section = object.section_by_name(".text").ok_or(anyhow!("No .text section"))?;
 
     let rdata_section = object.section_by_name(".rdata").ok_or(anyhow!("No .rdata section"))?;
@@ -100,7 +98,7 @@ pub fn find_vtables(object: &File) -> Result<Vec<Class>> {
         }
     }
 
-    Ok(Vec::new())
+    Ok(vtables)
 }
 
 fn is_mov_from_reg_to_mem(cs: &Capstone, insn: &Insn, reg: &RegId) -> Result<bool> {
