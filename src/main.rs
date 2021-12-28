@@ -1,4 +1,5 @@
 mod class;
+mod context;
 mod vtable;
 
 use anyhow::Result;
@@ -17,9 +18,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let file = fs::read(args.file_name).await?;
-    let obj = object::File::parse(&*file)?;
+    let object = object::File::parse(&*file)?;
 
-    vtable::find_vtables(&obj)?;
+    let context = context::Context::new(object)?;
+    vtable::find_vtables(&context)?;
 
     Ok(())
 }
