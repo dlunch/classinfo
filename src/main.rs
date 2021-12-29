@@ -1,6 +1,7 @@
 mod class;
 mod context;
 mod vtable;
+mod util;
 
 use anyhow::Result;
 use clap::Parser;
