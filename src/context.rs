@@ -32,6 +32,6 @@ impl<'a> Context<'a> {
     pub fn disassemble(&'a self) -> Result<Instructions<'a>> {
         let text_section = self.object.section_by_name(".text").ok_or(anyhow!("No .text section"))?;
 
-        Ok(self.cs.disasm_all(text_section.data()?, text_section.address()).map_err(|x| anyhow!(x))?)
+        self.cs.disasm_all(text_section.data()?, text_section.address()).map_err(|x| anyhow!(x))
     }
 }
