@@ -1,7 +1,8 @@
 mod class;
 mod context;
-mod vtable;
+mod rtti;
 mod util;
+mod vtable;
 
 use anyhow::Result;
 use clap::Parser;
@@ -22,7 +23,14 @@ async fn main() -> Result<()> {
     let object = object::File::parse(&*file)?;
 
     let context = context::Context::new(object)?;
-    vtable::find_vtables(&context)?;
+
+    let vtables = vtable::find_vtables(&context)?;
+    for vtable in vtables {
+        println!("{}", vtable);
+        if let Some(class_name) = rtti::try_get_class_info_by_rtti(&context, vtable)? {
+            println!("{}", class_name);
+        }
+    }
 
     Ok(())
 }
