@@ -1,4 +1,3 @@
-mod class;
 mod context;
 mod rtti;
 mod util;
