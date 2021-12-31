@@ -135,7 +135,9 @@ mod tests {
         let obj = object::File::parse(&*file)?;
         let context = Context::new(obj)?;
 
-        find_vtables(&context)?;
+        let vtables = find_vtables(&context)?;
+
+        assert_eq!(vtables, &[0x140010318, 0x140010338, 0x140010368, 0x140010390, 0x1400113a0]);
 
         Ok(())
     }

@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
 
     let vtables = vtable::find_vtables(&context)?;
     for vtable in vtables {
-        println!("{}", vtable);
+        println!("{:#x}", vtable);
         if let Some(class_name) = rtti::try_get_class_info_by_rtti(&context, vtable)? {
             println!("{}", class_name);
         }
