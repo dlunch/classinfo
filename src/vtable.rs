@@ -60,7 +60,7 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
         let insn_detail = context.cs.insn_detail(insn).map_err(|x| anyhow!(x))?;
         let arch_detail = insn_detail.arch_detail();
 
-        // test if x64 lea reg, [rip + x]; mov [dest], reg
+        // test if x64; lea reg, [rip + x]; mov [dest], reg
         if mnemonic == x86::X86Insn::X86_INS_LEA {
             let operand_types = arch_detail.x86().unwrap().operands().map(|x| x.op_type).collect::<Vec<_>>();
 
@@ -72,6 +72,18 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
                         log::debug!("Found vtable {:#x}", src_addr);
                         vtables.insert(src_addr);
                     }
+                }
+            }
+        }
+        // test if x86; mov dword ptr [reg], offset
+        if mnemonic == x86::X86Insn::X86_INS_MOV {
+            let operand_types = arch_detail.x86().unwrap().operands().map(|x| x.op_type).collect::<Vec<_>>();
+
+            if let [x86::X86OperandType::Mem(_), x86::X86OperandType::Imm(imm)] = &operand_types[..] {
+                let src_addr = *imm as u64;
+                if vtable_candidates.contains(&src_addr) {
+                    log::debug!("Found vtable {:#x}", imm);
+                    vtables.insert(src_addr);
                 }
             }
         }
@@ -122,7 +134,8 @@ mod tests {
         let obj = object::File::parse(&*file)?;
         let context = Context::new(obj)?;
 
-        find_vtables(&context)?;
+        let vtables = find_vtables(&context)?;
+        assert_eq!(vtables, &[0x40e164, 0x40e16c, 0x40e174, 0x40e194, 0x40e1b0, 0x40ecb0]);
 
         Ok(())
     }
