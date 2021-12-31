@@ -53,7 +53,7 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
     // 2. Validate vtable candidates by parsing the code.
     let insns = context.disassemble()?;
 
-    let mut vtables = Vec::new();
+    let mut vtables = BTreeSet::new();
     let mut it = insns.iter().peekable();
     while let Some(insn) = it.next() {
         let mnemonic = x86::X86Insn::from(insn.id().0);
@@ -70,14 +70,14 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
 
                     if vtable_candidates.contains(&src_addr) && is_mov_from_reg_to_mem(&context.cs, it.peek().unwrap(), reg)? {
                         log::debug!("Found vtable {:#x}", src_addr);
-                        vtables.push(src_addr);
+                        vtables.insert(src_addr);
                     }
                 }
             }
         }
     }
 
-    Ok(vtables)
+    Ok(vtables.into_iter().collect())
 }
 
 fn is_mov_from_reg_to_mem(cs: &Capstone, insn: &Insn, reg: &RegId) -> Result<bool> {
