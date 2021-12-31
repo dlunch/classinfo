@@ -43,5 +43,9 @@ pub fn try_get_class_info_by_rtti(context: &Context, vtable_base: u64) -> Result
 
     log::trace!("{:#x} Type Name {:}", vtable_base, type_name);
 
-    Ok(Some(type_name.to_owned()))
+    // msvc_demangler cannot consume rtti name, like `.?AVtest@@`
+    let mangled_name = format!("?{}", &type_name[4..]);
+    let demangled_name = msvc_demangler::demangle(&mangled_name, msvc_demangler::DemangleFlags::llvm())?;
+
+    Ok(Some(demangled_name))
 }
