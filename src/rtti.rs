@@ -10,8 +10,8 @@ struct RTTICompleteObjectLocator {
     signature: u32,
     vtable_offset: u32,
     cd_offset: u32,
-    type_descriptor_rva: u32,
-    class_hierarchy_rva: u32,
+    type_descriptor: u32,
+    class_hierarchy: u32,
 }
 
 pub fn cast<T>(data: &[u8]) -> &T {
@@ -33,9 +33,12 @@ pub fn try_get_class_info_by_rtti(context: &Context, vtable_base: u64) -> Result
     let rtti_locator = cast::<RTTICompleteObjectLocator>(&rdata[(rtti_locator_base - rdata_section.address()) as usize..]);
     log::trace!("{:#x} RTTI Complete Object Locator {:#x}", vtable_base, rtti_locator_base);
 
-    log::trace!("{:#x} RTTI Type Descriptor {:#x}", vtable_base, rtti_locator.type_descriptor_rva);
-    let rtti_type_descriptor =
-        &data[(rtti_locator.type_descriptor_rva as u64 + context.object.relative_address_base() - data_section.address()) as usize..];
+    log::trace!("{:#x} RTTI Type Descriptor {:#x}", vtable_base, rtti_locator.type_descriptor);
+    let rtti_type_descriptor = if context.pointer_size == 8 {
+        &data[(rtti_locator.type_descriptor as u64 + context.object.relative_address_base() - data_section.address()) as usize..]
+    } else {
+        &data[(rtti_locator.type_descriptor as u64 - data_section.address()) as usize..]
+    };
 
     let type_name = &rtti_type_descriptor[context.pointer_size * 2..];
     let type_name_end = type_name.iter().position(|&x| x == 0).ok_or(anyhow!("Invalid type name"))?;
@@ -48,4 +51,49 @@ pub fn try_get_class_info_by_rtti(context: &Context, vtable_base: u64) -> Result
     let demangled_name = msvc_demangler::demangle(&mangled_name, msvc_demangler::DemangleFlags::llvm())?;
 
     Ok(Some(demangled_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::fs;
+
+    use super::{try_get_class_info_by_rtti, Context};
+
+    fn init() {
+        let mut builder = pretty_env_logger::formatted_builder();
+
+        if let Ok(s) = ::std::env::var("RUST_LOG") {
+            builder.parse_filters(&s);
+        }
+
+        let _ = builder.is_test(true).try_init();
+    }
+
+    #[tokio::test]
+    async fn test_x86() -> anyhow::Result<()> {
+        init();
+
+        let file = fs::read("./test_data/msvc_rtti1_32.exe").await?;
+        let obj = object::File::parse(&*file)?;
+        let context = Context::new(obj)?;
+
+        let class_name = try_get_class_info_by_rtti(&context, 0x40e164)?;
+        assert_eq!(class_name.unwrap(), "test");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_x64() -> anyhow::Result<()> {
+        init();
+
+        let file = fs::read("./test_data/msvc_rtti1_64.exe").await?;
+        let obj = object::File::parse(&*file)?;
+        let context = Context::new(obj)?;
+
+        let class_name = try_get_class_info_by_rtti(&context, 0x140010318)?;
+        assert_eq!(class_name.unwrap(), "test");
+
+        Ok(())
+    }
 }
