@@ -2,14 +2,20 @@ use capstone::{
     arch::{x86, DetailsArchInsn},
     Capstone, Insn, RegId,
 };
-use std::collections::BTreeSet;
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, Result};
 use object::{Object, ObjectSection};
 
 use super::{context::Context, util::convert_pointer};
 
-pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
+#[derive(Eq, PartialEq, Debug)]
+pub struct VTable {
+    pub address: u64,
+    pub references: Vec<u64>,
+}
+
+pub fn find_vtables(context: &Context<'_>) -> Result<Vec<VTable>> {
     let text_section = context.object.section_by_name(".text").ok_or(anyhow!("No .text section"))?;
 
     let rdata_section = context.object.section_by_name(".rdata").ok_or(anyhow!("No .rdata section"))?;
@@ -56,7 +62,19 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
         .disasm_all(text_section.data()?, text_section.address())
         .map_err(|x| anyhow!(x))?;
 
-    let mut vtables = BTreeSet::new();
+    let mut vtables = BTreeMap::new();
+
+    fn vtable_found(vtables: &mut BTreeMap<u64, VTable>, address: u64, reference: u64) {
+        if let Entry::Vacant(e) = vtables.entry(address) {
+            e.insert(VTable {
+                address,
+                references: vec![reference],
+            });
+        } else {
+            vtables.get_mut(&address).unwrap().references.push(reference);
+        }
+    }
+
     let mut it = insns.iter().peekable();
     while let Some(insn) = it.next() {
         let mnemonic = x86::X86Insn::from(insn.id().0);
@@ -73,7 +91,8 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
 
                     if vtable_candidates.contains(&src_addr) && is_mov_from_reg_to_mem(&context.cs, it.peek().unwrap(), reg)? {
                         log::debug!("Found vtable {:#x}", src_addr);
-                        vtables.insert(src_addr);
+
+                        vtable_found(&mut vtables, src_addr, insn.address());
                     }
                 }
             }
@@ -86,13 +105,14 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
                 let src_addr = *imm as u64;
                 if vtable_candidates.contains(&src_addr) {
                     log::debug!("Found vtable {:#x}", imm);
-                    vtables.insert(src_addr);
+
+                    vtable_found(&mut vtables, src_addr, insn.address());
                 }
             }
         }
     }
 
-    Ok(vtables.into_iter().collect())
+    Ok(vtables.into_iter().map(|(_, v)| v).collect())
 }
 
 fn is_mov_from_reg_to_mem(cs: &Capstone, insn: &Insn, reg: &RegId) -> Result<bool> {
@@ -117,7 +137,7 @@ fn is_mov_from_reg_to_mem(cs: &Capstone, insn: &Insn, reg: &RegId) -> Result<boo
 mod tests {
     use tokio::fs;
 
-    use super::{find_vtables, Context};
+    use super::{find_vtables, Context, VTable};
 
     fn init() {
         let mut builder = pretty_env_logger::formatted_builder();
@@ -138,7 +158,35 @@ mod tests {
         let context = Context::new(obj)?;
 
         let vtables = find_vtables(&context)?;
-        assert_eq!(vtables, &[0x40e164, 0x40e16c, 0x40e174, 0x40e194, 0x40e1b0, 0x40ecb0]);
+        assert_eq!(
+            vtables,
+            &[
+                VTable {
+                    address: 0x40e164,
+                    references: vec![0x40104a,],
+                },
+                VTable {
+                    address: 0x40e16c,
+                    references: vec![0x4010e6,],
+                },
+                VTable {
+                    address: 0x40e174,
+                    references: vec![0x4013bf, 0x4013e5, 0x4013fc,],
+                },
+                VTable {
+                    address: 0x40e194,
+                    references: vec![0x40135e, 0x40137c,],
+                },
+                VTable {
+                    address: 0x40e1b0,
+                    references: vec![0x401391, 0x4013af,],
+                },
+                VTable {
+                    address: 0x40ecb0,
+                    references: vec![0x403ae4, 0x403b02,],
+                },
+            ]
+        );
 
         Ok(())
     }
@@ -152,8 +200,31 @@ mod tests {
         let context = Context::new(obj)?;
 
         let vtables = find_vtables(&context)?;
-
-        assert_eq!(vtables, &[0x140010318, 0x140010338, 0x140010368, 0x140010390, 0x1400113a0]);
+        assert_eq!(
+            vtables,
+            &[
+                VTable {
+                    address: 0x140010318,
+                    references: vec![0x14000106a,],
+                },
+                VTable {
+                    address: 0x140010338,
+                    references: vec![0x14000149c,],
+                },
+                VTable {
+                    address: 0x140010368,
+                    references: vec![0x1400013d9, 0x1400013fc,],
+                },
+                VTable {
+                    address: 0x140010390,
+                    references: vec![0x140001435, 0x140001458,],
+                },
+                VTable {
+                    address: 0x1400113a0,
+                    references: vec![0x1400044dd, 0x140004500,],
+                },
+            ]
+        );
 
         Ok(())
     }
