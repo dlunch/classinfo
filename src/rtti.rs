@@ -30,6 +30,10 @@ pub fn try_get_class_info_by_rtti(context: &Context, vtable_base: u64) -> Result
         &rdata[(vtable_base - context.pointer_size as u64 - rdata_section.address()) as usize..],
         context.pointer_size,
     );
+    if !(rdata_section.address() < rtti_locator_base && rtti_locator_base < rdata_section.address() + rdata_section.size()) {
+        return Ok(None);
+    }
+
     let rtti_locator = cast::<RTTICompleteObjectLocator>(&rdata[(rtti_locator_base - rdata_section.address()) as usize..]);
     log::trace!("{:#x} RTTI Complete Object Locator {:#x}", vtable_base, rtti_locator_base);
 
