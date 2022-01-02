@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use capstone::{
     arch::{x86, BuildsCapstone},
-    Capstone, Instructions,
+    Capstone,
 };
-use object::{Object, ObjectSection};
+use object::Object;
 
 pub struct Context<'a> {
     pub object: object::File<'a>,
@@ -27,11 +27,5 @@ impl<'a> Context<'a> {
             .map_err(|x| anyhow!(x))?;
 
         Ok(Self { object, cs, pointer_size })
-    }
-
-    pub fn disassemble(&'a self) -> Result<Instructions<'a>> {
-        let text_section = self.object.section_by_name(".text").ok_or(anyhow!("No .text section"))?;
-
-        self.cs.disasm_all(text_section.data()?, text_section.address()).map_err(|x| anyhow!(x))
     }
 }

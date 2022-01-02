@@ -51,7 +51,10 @@ pub fn find_vtables(context: &Context<'_>) -> Result<Vec<u64>> {
         .all;
 
     // 2. Validate vtable candidates by parsing the code.
-    let insns = context.disassemble()?;
+    let insns = context
+        .cs
+        .disasm_all(text_section.data()?, text_section.address())
+        .map_err(|x| anyhow!(x))?;
 
     let mut vtables = BTreeSet::new();
     let mut it = insns.iter().peekable();
