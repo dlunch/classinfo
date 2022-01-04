@@ -11,6 +11,6 @@ anyhow = { version = "^1.0" }
 tokio = { version = "^1.0", features = ["full"] }
 log = { version = "^0.4" }
 pretty_env_logger = { version = "^0.4" }
-clap = { version = "^3.0.0-rc.8", features = ["derive"] }
+clap = { version = "^3.0.2", features = ["derive"] }
 capstone = { version = "^0.10" }
 msvc-demangler = { version = "^0.9" }
