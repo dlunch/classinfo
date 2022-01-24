@@ -21,12 +21,12 @@ async fn main() -> Result<()> {
     let file = fs::read(args.file_name).await?;
     let object = object::File::parse(&*file)?;
 
-    let context = context::Context::new(object)?;
+    let mut context = context::Context::new(object)?;
 
-    let vtables = vtable::find_vtables(&context)?;
+    let vtables = vtable::find_vtables(&mut context)?;
     for vtable in vtables {
-        println!("{:#x}", vtable.address);
-        if let Some(class_name) = rtti::try_get_class_info_by_rtti(&context, vtable.address)? {
+        println!("{:#x}", vtable);
+        if let Some(class_name) = rtti::try_get_class_info_by_rtti(&context, vtable)? {
             println!("{}", class_name);
         }
     }
