@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::{anyhow, Result};
 use capstone::{
     arch::{x86, BuildsCapstone},
@@ -9,6 +11,7 @@ pub struct Context<'a> {
     pub object: object::File<'a>,
     pub cs: Capstone,
     pub pointer_size: usize,
+    pub xrefs: BTreeMap<u64, Vec<u64>>,
 }
 
 impl<'a> Context<'a> {
@@ -26,6 +29,11 @@ impl<'a> Context<'a> {
             .build()
             .map_err(|x| anyhow!(x))?;
 
-        Ok(Self { object, cs, pointer_size })
+        Ok(Self {
+            object,
+            cs,
+            pointer_size,
+            xrefs: BTreeMap::new(),
+        })
     }
 }
