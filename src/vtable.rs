@@ -1,13 +1,13 @@
-use capstone::{
-    arch::{x86, DetailsArchInsn},
-    Capstone, Insn, RegId,
-};
+use capstone::{arch::x86, RegId};
 use std::collections::{btree_map::Entry, BTreeSet};
 
 use anyhow::{anyhow, Result};
 use object::{Object, ObjectSection};
 
-use super::{context::Context, util::convert_pointer};
+use super::{
+    context::{Context, Instruction},
+    util::convert_pointer,
+};
 
 pub fn find_vtables(context: &mut Context<'_>) -> Result<Vec<u64>> {
     let text_section = context.object.section_by_name(".text").ok_or(anyhow!("No .text section"))?;
@@ -51,42 +51,33 @@ pub fn find_vtables(context: &mut Context<'_>) -> Result<Vec<u64>> {
         .all;
 
     // 2. Validate vtable candidates by parsing the code.
-    let insns = context
-        .cs
-        .disasm_all(text_section.data()?, text_section.address())
-        .map_err(|x| anyhow!(x))?;
-
     let mut vtables = BTreeSet::new();
 
-    let mut it = insns.iter().peekable();
+    let mut it = context.insns.iter().peekable();
     while let Some(insn) = it.next() {
-        let mnemonic = x86::X86Insn::from(insn.id().0);
-        let insn_detail = context.cs.insn_detail(insn).map_err(|x| anyhow!(x))?;
-        let arch_detail = insn_detail.arch_detail();
-
         // test if x64; lea reg, [rip + x]; mov [dest], reg
-        if mnemonic == x86::X86Insn::X86_INS_LEA {
-            let operand_types = arch_detail.x86().unwrap().operands().map(|x| x.op_type).collect::<Vec<_>>();
+        if insn.mnemonic == x86::X86Insn::X86_INS_LEA {
+            let operand_types = insn.operands.iter().map(|x| &x.op_type).collect::<Vec<_>>();
 
             if let [x86::X86OperandType::Reg(reg), x86::X86OperandType::Mem(mem)] = &operand_types[..] {
                 if mem.base().0 as u32 == x86::X86Reg::X86_REG_RIP {
-                    let src_addr = (mem.disp() + insn.address() as i64) as u64 + insn.bytes().len() as u64; // TODO: check overflow
+                    let src_addr = (mem.disp() + insn.address as i64) as u64 + insn.bytes.len() as u64; // TODO: check overflow
 
-                    if vtable_candidates.contains(&src_addr) && is_mov_from_reg_to_mem(&context.cs, it.peek().unwrap(), reg)? {
+                    if vtable_candidates.contains(&src_addr) && is_mov_from_reg_to_mem(it.peek().unwrap(), reg)? {
                         log::debug!("Found vtable {:#x}", src_addr);
 
                         vtables.insert(src_addr);
                         if let Entry::Vacant(e) = context.xrefs.entry(src_addr) {
                             e.insert(Vec::new());
                         }
-                        context.xrefs.get_mut(&src_addr).unwrap().push(insn.address());
+                        context.xrefs.get_mut(&src_addr).unwrap().push(insn.address);
                     }
                 }
             }
         }
         // test if x86; mov dword ptr [reg], offset
-        if mnemonic == x86::X86Insn::X86_INS_MOV {
-            let operand_types = arch_detail.x86().unwrap().operands().map(|x| x.op_type).collect::<Vec<_>>();
+        if insn.mnemonic == x86::X86Insn::X86_INS_MOV {
+            let operand_types = insn.operands.iter().map(|x| &x.op_type).collect::<Vec<_>>();
 
             if let [x86::X86OperandType::Mem(_), x86::X86OperandType::Imm(imm)] = &operand_types[..] {
                 let src_addr = *imm as u64;
@@ -97,7 +88,7 @@ pub fn find_vtables(context: &mut Context<'_>) -> Result<Vec<u64>> {
                     if let Entry::Vacant(e) = context.xrefs.entry(src_addr) {
                         e.insert(Vec::new());
                     }
-                    context.xrefs.get_mut(&src_addr).unwrap().push(insn.address());
+                    context.xrefs.get_mut(&src_addr).unwrap().push(insn.address);
                 }
             }
         }
@@ -106,15 +97,11 @@ pub fn find_vtables(context: &mut Context<'_>) -> Result<Vec<u64>> {
     Ok(vtables.into_iter().collect())
 }
 
-fn is_mov_from_reg_to_mem(cs: &Capstone, insn: &Insn, reg: &RegId) -> Result<bool> {
-    let insn_detail = cs.insn_detail(insn).map_err(|x| anyhow!(x))?;
-    let arch_detail = insn_detail.arch_detail();
-    let mnemonic = x86::X86Insn::from(insn.id().0);
-
-    if mnemonic != x86::X86Insn::X86_INS_MOV {
+fn is_mov_from_reg_to_mem(insn: &Instruction, reg: &RegId) -> Result<bool> {
+    if insn.mnemonic != x86::X86Insn::X86_INS_MOV {
         return Ok(false);
     }
-    let operand_types = arch_detail.x86().unwrap().operands().map(|x| x.op_type).collect::<Vec<_>>();
+    let operand_types = insn.operands.iter().map(|x| &x.op_type).collect::<Vec<_>>();
 
     if let [x86::X86OperandType::Mem(_), x86::X86OperandType::Reg(insn_reg)] = &operand_types[..] {
         if insn_reg == reg {
