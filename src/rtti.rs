@@ -1,9 +1,9 @@
 use std::str;
 
 use anyhow::{anyhow, Result};
-use object::{Object, ObjectSection};
+use object::{ObjectSection, Section};
 
-use super::{context::Context, util::convert_pointer};
+use super::util::convert_pointer;
 
 #[repr(C)]
 struct RTTICompleteObjectLocator {
@@ -19,16 +19,20 @@ pub fn cast<T>(data: &[u8]) -> &T {
 }
 
 // msvc-specific for now
-pub fn try_get_class_info_by_rtti(context: &Context, vtable_base: u64) -> Result<Option<String>> {
-    let rdata_section = context.object.section_by_name(".rdata").ok_or(anyhow!("No .rdata section"))?;
+pub fn try_get_class_info_by_rtti(
+    base_addr: u64,
+    data_section: &Section,
+    rdata_section: &Section,
+    pointer_size: usize,
+    vtable_base: u64,
+) -> Result<Option<String>> {
     let rdata = rdata_section.data()?;
 
-    let data_section = context.object.section_by_name(".data").ok_or(anyhow!("No .data section"))?;
     let data = data_section.data()?;
 
     let rtti_locator_base = convert_pointer(
-        &rdata[(vtable_base - context.pointer_size as u64 - rdata_section.address()) as usize..],
-        context.pointer_size,
+        &rdata[(vtable_base - pointer_size as u64 - rdata_section.address()) as usize..],
+        pointer_size,
     );
     if !(rdata_section.address() < rtti_locator_base && rtti_locator_base < rdata_section.address() + rdata_section.size()) {
         return Ok(None);
@@ -38,13 +42,13 @@ pub fn try_get_class_info_by_rtti(context: &Context, vtable_base: u64) -> Result
     log::trace!("{:#x} RTTI Complete Object Locator {:#x}", vtable_base, rtti_locator_base);
 
     log::trace!("{:#x} RTTI Type Descriptor {:#x}", vtable_base, rtti_locator.type_descriptor);
-    let rtti_type_descriptor = if context.pointer_size == 8 {
-        &data[(rtti_locator.type_descriptor as u64 + context.object.relative_address_base() - data_section.address()) as usize..]
+    let rtti_type_descriptor = if pointer_size == 8 {
+        &data[(rtti_locator.type_descriptor as u64 + base_addr - data_section.address()) as usize..]
     } else {
         &data[(rtti_locator.type_descriptor as u64 - data_section.address()) as usize..]
     };
 
-    let type_name = &rtti_type_descriptor[context.pointer_size * 2..];
+    let type_name = &rtti_type_descriptor[pointer_size * 2..];
     let type_name_end = type_name.iter().position(|&x| x == 0).ok_or(anyhow!("Invalid type name"))?;
     let type_name = str::from_utf8(&type_name[..type_name_end])?;
 
@@ -59,9 +63,11 @@ pub fn try_get_class_info_by_rtti(context: &Context, vtable_base: u64) -> Result
 
 #[cfg(test)]
 mod tests {
+    use anyhow::anyhow;
+    use object::Object;
     use tokio::fs;
 
-    use super::{try_get_class_info_by_rtti, Context};
+    use super::try_get_class_info_by_rtti;
 
     fn init() {
         let mut builder = pretty_env_logger::formatted_builder();
@@ -78,10 +84,13 @@ mod tests {
         init();
 
         let file = fs::read("./test_data/msvc_rtti1_32.exe").await?;
-        let obj = object::File::parse(&*file)?;
-        let context = Context::new(obj)?;
+        let object = object::File::parse(&*file)?;
+        let pointer_size = if object.is_64() { 8 } else { 4 };
 
-        let class_name = try_get_class_info_by_rtti(&context, 0x40e164)?;
+        let data_section = object.section_by_name(".data").ok_or(anyhow!("No .data section"))?;
+        let rdata_section = object.section_by_name(".rdata").ok_or(anyhow!("No .rdata section"))?;
+
+        let class_name = try_get_class_info_by_rtti(object.relative_address_base(), &data_section, &rdata_section, pointer_size, 0x40e164)?;
         assert_eq!(class_name.unwrap(), "test");
 
         Ok(())
@@ -92,10 +101,13 @@ mod tests {
         init();
 
         let file = fs::read("./test_data/msvc_rtti1_64.exe").await?;
-        let obj = object::File::parse(&*file)?;
-        let context = Context::new(obj)?;
+        let object = object::File::parse(&*file)?;
+        let pointer_size = if object.is_64() { 8 } else { 4 };
 
-        let class_name = try_get_class_info_by_rtti(&context, 0x140010318)?;
+        let data_section = object.section_by_name(".data").ok_or(anyhow!("No .data section"))?;
+        let rdata_section = object.section_by_name(".rdata").ok_or(anyhow!("No .rdata section"))?;
+
+        let class_name = try_get_class_info_by_rtti(object.relative_address_base(), &data_section, &rdata_section, pointer_size, 0x140010318)?;
         assert_eq!(class_name.unwrap(), "test");
 
         Ok(())
