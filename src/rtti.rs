@@ -42,8 +42,9 @@ pub fn try_get_class_info_by_rtti(
     log::trace!("{:#x} RTTI Complete Object Locator {:#x}", vtable_base, rtti_locator_base);
     log::trace!("{:#x} RTTI Type Descriptor {:#x}", vtable_base, rtti_locator.type_descriptor);
 
-    if !(data_section.address() < (rtti_locator.type_descriptor as u64)
-        && (rtti_locator.type_descriptor as u64) < data_section.address() + rdata_section.size())
+    if pointer_size == 4
+        && !(data_section.address() < (rtti_locator.type_descriptor as u64)
+            && (rtti_locator.type_descriptor as u64) < data_section.address() + rdata_section.size())
     {
         return Ok(None);
     }
