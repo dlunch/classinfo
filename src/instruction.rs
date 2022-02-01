@@ -12,7 +12,7 @@ pub struct Instruction {
 }
 
 pub fn disassemble_all(code: &[u8], addr: u64, pointer_size: usize) -> Result<Vec<Instruction>> {
-    let cs = Capstone::new()
+    let mut cs = Capstone::new()
         .x86()
         .mode(if pointer_size == 4 {
             x86::ArchMode::Mode32
@@ -23,23 +23,28 @@ pub fn disassemble_all(code: &[u8], addr: u64, pointer_size: usize) -> Result<Ve
         .build()
         .map_err(|x| anyhow!(x))?;
 
+    cs.set_skipdata(true).map_err(|x| anyhow!(x))?;
+
     let insns = cs.disasm_all(code, addr).map_err(|x| anyhow!(x))?;
 
     Ok(insns
         .iter()
-        .map(|x| {
+        .filter_map(|x| {
             let mnemonic = x86::X86Insn::from(x.id().0);
+            if mnemonic == x86::X86Insn::X86_INS_INVALID {
+                return None;
+            }
             let insn_detail = cs.insn_detail(x).unwrap();
             let arch_detail = insn_detail.arch_detail();
 
             let operands = arch_detail.x86().unwrap().operands();
 
-            Instruction {
+            Some(Instruction {
                 address: x.address(),
                 bytes: x.bytes().to_vec(),
                 mnemonic,
                 operands: operands.into_iter().collect(),
-            }
+            })
         })
         .collect::<Vec<_>>())
 }

@@ -40,8 +40,14 @@ pub fn try_get_class_info_by_rtti(
 
     let rtti_locator = cast::<RTTICompleteObjectLocator>(&rdata[(rtti_locator_base - rdata_section.address()) as usize..]);
     log::trace!("{:#x} RTTI Complete Object Locator {:#x}", vtable_base, rtti_locator_base);
-
     log::trace!("{:#x} RTTI Type Descriptor {:#x}", vtable_base, rtti_locator.type_descriptor);
+
+    if !(data_section.address() < (rtti_locator.type_descriptor as u64)
+        && (rtti_locator.type_descriptor as u64) < data_section.address() + rdata_section.size())
+    {
+        return Ok(None);
+    }
+
     let rtti_type_descriptor = if pointer_size == 8 {
         &data[(rtti_locator.type_descriptor as u64 + base_addr - data_section.address()) as usize..]
     } else {
@@ -56,7 +62,7 @@ pub fn try_get_class_info_by_rtti(
 
     // msvc_demangler cannot consume rtti name, like `.?AVtest@@`
     let mangled_name = format!("?{}", &type_name[4..]);
-    let demangled_name = msvc_demangler::demangle(&mangled_name, msvc_demangler::DemangleFlags::llvm())?;
+    let demangled_name = msvc_demangler::demangle(&mangled_name, msvc_demangler::DemangleFlags::llvm()).unwrap_or_else(|_| type_name.into());
 
     Ok(Some(demangled_name))
 }
