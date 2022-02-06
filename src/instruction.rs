@@ -9,6 +9,7 @@ use memchr::memmem::Finder;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 pub struct Instruction {
+    pub human_readable: String,
     pub address: u64,
     pub bytes: Vec<u8>,
     pub mnemonic: x86::X86Insn,
@@ -44,6 +45,7 @@ fn disassemble(code: &[u8], addr: u64, pointer_size: usize) -> Result<Vec<Instru
             let operands = arch_detail.x86().unwrap().operands();
 
             Some(Instruction {
+                human_readable: format!("{} {}", x.mnemonic().unwrap_or(""), x.op_str().unwrap_or("")).trim().into(),
                 address: x.address(),
                 bytes: x.bytes().to_vec(),
                 mnemonic,
