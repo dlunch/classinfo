@@ -32,11 +32,11 @@ async fn main() -> Result<()> {
 
     let (vtables, _) = vtable::find_vtables(&insns, &text_section, &rdata_section, pointer_size)?;
     for vtable in vtables {
-        println!("{:#x}", vtable);
+        println!("{vtable:#x}");
         if let Some(class_name) =
             rtti::try_get_class_info_by_rtti(object.relative_address_base(), &data_section, &rdata_section, pointer_size, vtable)?
         {
-            println!("{}", class_name);
+            println!("{class_name}");
         }
     }
 
