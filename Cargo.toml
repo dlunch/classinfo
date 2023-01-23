@@ -6,7 +6,7 @@ license = "MIT"
 
 
 [dependencies]
-object = { version = "^0.28" }
+object = { version = "^0.30" }
 anyhow = { version = "^1.0" }
 tokio = { version = "^1.0", features = ["full"] }
 log = { version = "^0.4" }
