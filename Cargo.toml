@@ -15,4 +15,4 @@ clap = { version = "^3.0", features = ["derive"] }
 capstone = { version = "^0.10" }
 msvc-demangler = { version = "^0.9" }
 memchr = { version = "^2.4" }
-rayon = { version = "^1.5" }
+rayon = { version = "^1.7" }
